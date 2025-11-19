@@ -3,10 +3,15 @@
 EPG to M3U Icons - Merge channel icons from EPG into M3U playlists
 """
 import re
+import os
 import xml.etree.ElementTree as ET
-from flask import Flask, Response, request
+from flask import Flask, Response, request, render_template_string, redirect, url_for
 import requests
 from urllib.parse import unquote
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -197,15 +202,15 @@ def merge_m3u_with_epg_icons(m3u_content, epg_content):
 @app.route('/playlist.m3u')
 def serve_playlist():
     """Serve the merged M3U playlist"""
-    # Get M3U and EPG URLs from query parameters
-    m3u_url = request.args.get('m3u')
-    epg_url = request.args.get('epg')
+    # Get M3U and EPG URLs from query parameters, fallback to environment variables
+    m3u_url = request.args.get('m3u') or os.getenv('M3U_URL')
+    epg_url = request.args.get('epg') or os.getenv('EPG_URL')
 
     if not m3u_url:
-        return "Error: 'm3u' parameter is required", 400
+        return "Error: 'm3u' parameter is required or M3U_URL must be set in .env file", 400
 
     if not epg_url:
-        return "Error: 'epg' parameter is required", 400
+        return "Error: 'epg' parameter is required or EPG_URL must be set in .env file", 400
 
     try:
         # Fetch M3U and EPG
@@ -226,26 +231,252 @@ def serve_playlist():
         return f"Error: {str(e)}", 500
 
 
+SETTINGS_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Settings - EPG to M3U Icons</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .nav {
+            margin-bottom: 20px;
+        }
+        .nav a {
+            color: #4CAF50;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .current-url {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-left: 3px solid #4CAF50;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .current-url code {
+            color: #333;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="/">← Back to Home</a>
+        </div>
+
+        <h1>Settings</h1>
+
+        {% if success %}
+        <div class="success">Settings saved successfully!</div>
+        {% endif %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="m3u_url">M3U Playlist URL:</label>
+                <input type="text" id="m3u_url" name="m3u_url" value="{{ m3u_url }}" placeholder="http://example.com/playlist.m3u">
+            </div>
+
+            <div class="form-group">
+                <label for="epg_url">EPG/XMLTV URL:</label>
+                <input type="text" id="epg_url" name="epg_url" value="{{ epg_url }}" placeholder="http://example.com/epg.xml">
+            </div>
+
+            <button type="submit">Save Settings</button>
+        </form>
+
+        {% if m3u_url and epg_url %}
+        <div class="current-url">
+            <strong>Your playlist URL:</strong><br>
+            <code>http://localhost:5000/playlist.m3u</code>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
+
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    """Settings page to configure URLs"""
+    success = False
+
+    if request.method == 'POST':
+        m3u_url = request.form.get('m3u_url', '').strip()
+        epg_url = request.form.get('epg_url', '').strip()
+
+        # Update .env file
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+
+        with open(env_path, 'w') as f:
+            f.write(f"# EPG to M3U Icons Configuration\n")
+            f.write(f"# Updated: {os.popen('date').read().strip() if os.name != 'nt' else 'Now'}\n\n")
+            f.write(f"M3U_URL={m3u_url}\n")
+            f.write(f"EPG_URL={epg_url}\n")
+
+        # Reload environment variables
+        load_dotenv(override=True)
+        success = True
+
+    # Get current values
+    m3u_url = os.getenv('M3U_URL', '')
+    epg_url = os.getenv('EPG_URL', '')
+
+    return render_template_string(SETTINGS_TEMPLATE,
+                                 m3u_url=m3u_url,
+                                 epg_url=epg_url,
+                                 success=success)
+
+
 @app.route('/')
 def index():
     """Show usage information"""
-    return """
-    <h1>EPG to M3U Icons Merger</h1>
-    <p>This service merges channel icons from an EPG into an M3U playlist.</p>
+    m3u_configured = bool(os.getenv('M3U_URL'))
+    epg_configured = bool(os.getenv('EPG_URL'))
+    both_configured = m3u_configured and epg_configured
 
-    <h2>Usage:</h2>
-    <pre>GET /playlist.m3u?m3u=&lt;M3U_URL&gt;&epg=&lt;EPG_URL&gt;</pre>
+    status_text = ""
+    if both_configured:
+        status_text = '<p style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 4px;">✓ URLs are configured! You can use <code>http://localhost:5000/playlist.m3u</code> directly.</p>'
+    else:
+        status_text = '<p style="background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 4px;">⚠ URLs not configured. Please visit <a href="/settings">Settings</a> to configure your URLs.</p>'
 
-    <h3>Parameters:</h3>
-    <ul>
-        <li><strong>m3u</strong> - URL to your M3U playlist (URL encoded)</li>
-        <li><strong>epg</strong> - URL to your EPG/XMLTV file (URL encoded)</li>
-    </ul>
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>EPG to M3U Icons Merger</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                background-color: white;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+            h1 {{ color: #333; margin-top: 0; }}
+            h2 {{ color: #555; }}
+            h3 {{ color: #666; }}
+            code {{
+                background-color: #f4f4f4;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: monospace;
+            }}
+            pre {{
+                background-color: #f4f4f4;
+                padding: 15px;
+                border-radius: 4px;
+                overflow-x: auto;
+            }}
+            ul {{ line-height: 1.8; }}
+            .button {{
+                display: inline-block;
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                text-decoration: none;
+                border-radius: 4px;
+                margin-top: 10px;
+            }}
+            .button:hover {{
+                background-color: #45a049;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>EPG to M3U Icons Merger</h1>
+            <p>This service merges channel icons from an EPG into an M3U playlist.</p>
 
-    <h3>Example:</h3>
-    <pre>/playlist.m3u?m3u=http://example.com/playlist.m3u&epg=http://example.com/epg.xml</pre>
+            {status_text}
 
-    <p>Use the resulting URL in your IPTV player to get your playlist with updated channel icons.</p>
+            <a href="/settings" class="button">⚙ Configure Settings</a>
+
+            <h2>Usage:</h2>
+
+            <h3>Option 1: Use Configured URLs (Recommended)</h3>
+            <p>After configuring your URLs in <a href="/settings">Settings</a>, simply use:</p>
+            <pre>http://localhost:5000/playlist.m3u</pre>
+
+            <h3>Option 2: Use Query Parameters</h3>
+            <pre>GET /playlist.m3u?m3u=&lt;M3U_URL&gt;&epg=&lt;EPG_URL&gt;</pre>
+
+            <h3>Parameters:</h3>
+            <ul>
+                <li><strong>m3u</strong> - URL to your M3U playlist (optional if configured in settings)</li>
+                <li><strong>epg</strong> - URL to your EPG/XMLTV file (optional if configured in settings)</li>
+            </ul>
+
+            <h3>Example:</h3>
+            <pre>/playlist.m3u?m3u=http://example.com/playlist.m3u&epg=http://example.com/epg.xml</pre>
+
+            <p>Use the resulting URL in your IPTV player to get your playlist with updated channel icons.</p>
+        </div>
+    </body>
+    </html>
     """
 
 

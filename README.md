@@ -9,6 +9,8 @@ A simple Python Flask server that merges channel icons from an EPG (XMLTV) file 
 - Matches channels using multiple strategies (tvg-id, tvg-name, channel name)
 - Updates or adds `tvg-logo` attributes to M3U entries
 - Serves the merged playlist via HTTP for use in IPTV players
+- Web-based settings page to configure and save your URLs
+- Persistent configuration using .env file
 
 ## Installation
 
@@ -18,6 +20,21 @@ A simple Python Flask server that merges channel icons from an EPG (XMLTV) file 
 ```bash
 pip install -r requirements.txt
 ```
+
+3. Configure your URLs (choose one option):
+
+   **Option A: Using the Web Interface (Recommended)**
+   - Start the server and visit `http://localhost:5000/settings`
+   - Enter your M3U and EPG URLs in the form
+   - Click "Save Settings"
+
+   **Option B: Using .env file**
+   - Copy `.env.example` to `.env`
+   - Edit `.env` and add your URLs:
+   ```bash
+   M3U_URL=http://example.com/playlist.m3u
+   EPG_URL=http://example.com/epg.xml
+   ```
 
 ## Usage
 
@@ -30,14 +47,23 @@ The server will start on `http://localhost:5000`
 
 ### Access your merged playlist:
 
-Use the following URL format in your IPTV player:
+**Option 1: Using Configured URLs (Easiest)**
+
+After configuring your URLs in the settings or `.env` file, simply use:
+```
+http://localhost:5000/playlist.m3u
+```
+
+**Option 2: Using Query Parameters**
+
+You can override or provide URLs directly via query parameters:
 ```
 http://localhost:5000/playlist.m3u?m3u=<M3U_URL>&epg=<EPG_URL>
 ```
 
 **Parameters:**
-- `m3u` - URL to your M3U playlist (URL encoded if needed)
-- `epg` - URL to your EPG/XMLTV file (URL encoded if needed)
+- `m3u` - URL to your M3U playlist (optional if configured in .env)
+- `epg` - URL to your EPG/XMLTV file (optional if configured in .env)
 
 ### Example:
 ```
